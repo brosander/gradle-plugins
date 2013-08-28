@@ -1,0 +1,84 @@
+println project.name
+
+class PentahoIvyPlugin implements Plugin<Project> {
+  def buildProperties 
+
+  //Will replace property references with their values in build.properties or assembly.properties for use at build time
+  def propertyHelper = org.apache.tools.ant.PropertyHelper.getPropertyHelper(new org.apache.tools.ant.Project())
+
+  //Will replace property references with a string that will resolve them for use in build.gradle
+  def printPropertyHelper = org.apache.tools.ant.PropertyHelper.getPropertyHelper(new org.apache.tools.ant.Project())
+  def engine = new groovy.text.SimpleTemplateEngine()
+
+  public PentahoIvyPlugin() {
+    def buildProperties = new Properties()
+    def buildFile = new File('build.properties')
+    if (!buildFile.exists()) {
+      buildFile = new File('assembly.properties')
+    }
+    if (buildFile.exists()) {
+      buildProperties.load(new FileReader(buildFile))
+    }
+    this.buildProperties = buildProperties
+    buildProperties.each{k, v -> propertyHelper.setProperty(null, k, v, true)}
+    buildProperties.each{k, v -> printPropertyHelper.setProperty(null, k, '${property(\'' + k + '\')}', true)}
+  }
+
+  def getIvyConfMapping(String ivyConf) {
+    if (ivyConf.contains('->')) {
+      ivyConf = ivyConf.split('->')[0]
+    }
+    if ('default'.equals(ivyConf)) {
+      return 'compile'
+    } else if ('test'.equals(ivyConf)) {
+      return 'testCompile'
+    } else if ('default-ext'.equals(ivyConf)) {
+      return 'compile'
+    }
+    return ivyConf
+  }
+
+  def registerDependencies(Closure registerAction) {
+    def parsedIvy = new XmlParser().parse('ivy.xml')
+    parsedIvy.dependencies.each { dependencies ->
+      def defaultConf = getIvyConfMapping((dependencies.@defaultconf).split('->')[0])
+      dependencies.dependency.each { dependency ->
+        def dependencyNotation = dependency.@org + ':' + dependency.@name + ':' + dependency.@rev 
+        def isTransitive = true
+        if (dependency.@transitive != null && !'true'.equalsIgnoreCase(dependency.@transitive)) {
+          isTransitive = false
+        }
+        def changing = false
+        if (dependency.@changing != null && 'true'.equalsIgnoreCase(dependency.@changing)) {
+          changing = true
+        }
+        if (dependency.@conf != null) {
+          registerAction(dependency.@conf, dependencyNotation, isTransitive, changing)
+        } else {
+          registerAction(defaultConf, dependencyNotation, isTransitive, changing)
+        }
+      }
+    }
+  }
+
+  void apply(Project project) {
+    project.plugins.apply(org.gradle.api.plugins.JavaPlugin)
+    buildProperties.each{k, v -> 
+      if (!project.hasProperty(k)) {
+        project.ext[k] = v
+      }
+    }
+
+    project.task('parse-ivy') << {
+      registerDependencies({conf, notation, isTransitive, isChanging -> project.getDependencies().add(getIvyConfMapping(conf), propertyHelper.replaceProperties(notation), {transitive = isTransitive; changing = isChanging})})
+    }
+
+    project.compileJava.dependsOn(project.tasks['parse-ivy'])
+
+    project.task('print-ivy') << {
+      registerDependencies({conf, notation, isTransitive, isChanging -> println getIvyConfMapping(conf) + ' "' + printPropertyHelper.replaceProperties(notation) + "\", {transitive = $isTransitive; changing = $isChanging}"})
+    }
+  }
+}
+
+project.ext['pentaho-ivy'] = PentahoIvyPlugin
