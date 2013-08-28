@@ -8,20 +8,6 @@ class PentahoIvyPlugin implements Plugin<Project> {
   def printPropertyHelper = org.apache.tools.ant.PropertyHelper.getPropertyHelper(new org.apache.tools.ant.Project())
   def engine = new groovy.text.SimpleTemplateEngine()
 
-  public PentahoIvyPlugin() {
-    def buildProperties = new Properties()
-    def buildFile = new File('build.properties')
-    if (!buildFile.exists()) {
-      buildFile = new File('assembly.properties')
-    }
-    if (buildFile.exists()) {
-      buildProperties.load(new FileReader(buildFile))
-    }
-    this.buildProperties = buildProperties
-    buildProperties.each{k, v -> propertyHelper.setProperty(null, k, v, true)}
-    buildProperties.each{k, v -> printPropertyHelper.setProperty(null, k, '${property(\'' + k + '\')}', true)}
-  }
-
   def getIvyConfMapping(String ivyConf) {
     if (ivyConf.contains('->')) {
       ivyConf = ivyConf.split('->')[0]
@@ -36,8 +22,8 @@ class PentahoIvyPlugin implements Plugin<Project> {
     return ivyConf
   }
 
-  def registerDependencies(Closure registerAction) {
-    def parsedIvy = new XmlParser().parse('ivy.xml')
+  def registerDependencies(String ivyLocation, Closure registerAction) {
+    def parsedIvy = new XmlParser().parse(ivyLocation)
     parsedIvy.dependencies.each { dependencies ->
       def defaultConf = getIvyConfMapping((dependencies.@defaultconf).split('->')[0])
       dependencies.dependency.each { dependency ->
@@ -60,23 +46,56 @@ class PentahoIvyPlugin implements Plugin<Project> {
   }
 
   void apply(Project project) {
+    def buildProperties = new Properties()
+    def buildFile = new File(project.projectDir.absolutePath + '/build.properties')
+    if (!buildFile.exists()) {
+      buildFile = new File(project.projectDir.absolutePath + '/assembly.properties')
+    } 
+    if (buildFile.exists()) {
+      println "Project $project.name Loaded build file $buildFile.absolutePath"
+    }
+    if (buildFile.exists()) {
+      buildProperties.load(new FileReader(buildFile))
+    }
+    this.buildProperties = buildProperties
+    buildProperties.each{k, v -> propertyHelper.setProperty(null, k, v, true)}
+    buildProperties.each{k, v -> printPropertyHelper.setProperty(null, k, '${property(\'' + k + '\')}', true)}
+    
     project.plugins.apply(org.gradle.api.plugins.JavaPlugin)
+
+    project.repositories {
+      ivy {
+        url "http://repo.pentaho.org/artifactory/repo/"
+        layout  "pattern", {
+          ivy "[organisation]/[module]/[revision]/[module]-[revision].ivy.xml"
+          artifact "[organisation]/[module]/[revision]/[module]-[revision].jar"
+          m2compatible = true
+        }
+      }
+      maven {
+        url 'http://repo.pentaho.org/artifactory/repo'
+      }
+      mavenCentral()
+    }
+
     buildProperties.each{k, v -> 
       if (!project.hasProperty(k)) {
         project.ext[k] = v
       }
     }
 
+    def ivyLocation = project.projectDir.absolutePath + "/ivy.xml"
+
     project.task('parse-ivy') << {
-      registerDependencies({conf, notation, isTransitive, isChanging -> project.getDependencies().add(getIvyConfMapping(conf), propertyHelper.replaceProperties(notation), {transitive = isTransitive; changing = isChanging})})
+      registerDependencies(ivyLocation, {conf, notation, isTransitive, isChanging -> project.getDependencies().add(getIvyConfMapping(conf), propertyHelper.replaceProperties(notation), {transitive = isTransitive; changing = isChanging})})
     }
 
     project.compileJava.dependsOn(project.tasks['parse-ivy'])
 
     project.task('print-ivy') << {
-      registerDependencies({conf, notation, isTransitive, isChanging -> println getIvyConfMapping(conf) + ' "' + printPropertyHelper.replaceProperties(notation) + "\", {transitive = $isTransitive; changing = $isChanging}"})
+      registerDependencies(ivyLocation, {conf, notation, isTransitive, isChanging -> println getIvyConfMapping(conf) + ' "' + printPropertyHelper.replaceProperties(notation) + "\", {transitive = $isTransitive; changing = $isChanging}"})
     }
   }
 }
 
-project.ext['pentaho-ivy'] = PentahoIvyPlugin
+project.ext['pentaho-ivy'] = PentahoIvyPlugin.class
