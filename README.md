@@ -25,7 +25,7 @@ Example build.gradle:
       }
     }
 
-Example settings.gradle (adapted from http://gradle.1045684.n5.nabble.com/Nested-multi-projects-and-caveats-td4480779.html):
+Example settings.gradle (adapted from http://gradle.1045684.n5.nabble.com/Nested-multi-projects-and-caveats-tp4480779p4805669.html):
 
     def path = [] as LinkedList 
 
