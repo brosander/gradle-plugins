@@ -1,5 +1,7 @@
 class PentahoIvyPlugin implements Plugin<Project> {
   def buildProperties 
+  def confMappingProperty = 'pentaho-ivy-conf-mapping'
+  def project
 
   //Will replace property references with their values in build.properties or assembly.properties for use at build time
   def propertyHelper = org.apache.tools.ant.PropertyHelper.getPropertyHelper(new org.apache.tools.ant.Project())
@@ -12,14 +14,11 @@ class PentahoIvyPlugin implements Plugin<Project> {
     if (ivyConf.contains('->')) {
       ivyConf = ivyConf.split('->')[0]
     }
-    if ('default'.equals(ivyConf)) {
-      return 'compile'
-    } else if ('test'.equals(ivyConf)) {
-      return 'testCompile'
-    } else if ('default-ext'.equals(ivyConf)) {
-      return 'compile'
+    def result = project.ext[confMappingProperty].get(ivyConf)
+    if (result == null) {
+      return ivyConf
     }
-    return ivyConf
+    return result
   }
 
   def registerDependencies(String ivyLocation, Closure registerAction) {
@@ -46,6 +45,7 @@ class PentahoIvyPlugin implements Plugin<Project> {
   }
 
   void apply(Project project) {
+    this.project = project
     def buildProperties = new Properties()
     def buildFile = new File(project.projectDir.absolutePath + '/build.properties')
     if (!buildFile.exists()) {
@@ -60,6 +60,17 @@ class PentahoIvyPlugin implements Plugin<Project> {
     this.buildProperties = buildProperties
     buildProperties.each{k, v -> propertyHelper.setProperty(null, k, v, true)}
     buildProperties.each{k, v -> printPropertyHelper.setProperty(null, k, '${property(\'' + k + '\')}', true)}
+
+    if (!project.hasProperty(confMappingProperty)) {
+      project.ext[confMappingProperty] = new HashMap()
+    }
+    def confMapping = project.ext[confMappingProperty]
+    if (!confMapping.containsKey('default')) {
+      confMapping.put('default', 'compile')
+    }
+    if (!confMapping.containsKey('test')) {
+      confMapping.put('test', 'testCompile')
+    }
     
     project.plugins.apply(org.gradle.api.plugins.JavaPlugin)
 
