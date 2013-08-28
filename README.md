@@ -2,35 +2,36 @@ This is a suite of plugins designed to facilitate porting of Pentaho build logic
 
 Example build.gradle:
 
-def rootProject = project
+    def rootProject = project
 
-file('/home/bryan/platform-codebase/gradle').listFiles().findAll { it.name.endsWith('.gradle')}.each { plugin ->
-    println "Applying: " + plugin + " to " + project.name
-    project.apply from: plugin 
-}
+    file('/home/bryan/platform-codebase/gradle').listFiles().findAll { it.name.endsWith('.gradle')}.each { plugin ->
+        println "Applying: " + plugin + " to " + project.name
+        project.apply from: plugin 
+    }
 
-subprojects {
-  apply plugin: rootProject.ext['pentaho-ivy']
-  sourceSets {
-    main {
-      java {
-        srcDir 'src'
+    subprojects {
+      apply plugin: rootProject.ext['pentaho-ivy']
+      sourceSets {
+        main {
+          java {
+            srcDir 'src'
+          }
+        }
+        test {
+          java {
+            srcDir 'test-src'
+          }
+        }
       }
     }
-    test {
-      java {
-        srcDir 'test-src'
-      }
-    }
-  }
-}
 
 Example settings.gradle (adapted from http://gradle.1045684.n5.nabble.com/Nested-multi-projects-and-caveats-td4480779.html):
-def path = [] as LinkedList 
 
-rootDir.traverse( 
-    type: groovy.io.FileType.FILES, 
-    nameFilter: ~/build\.gradle/, 
-    maxDepth: 3, 
-    preDir: { path << it.name }, 
-    postDir: { path.removeLast() }) { if (path) include path.join(":") } 
+    def path = [] as LinkedList 
+
+    rootDir.traverse( 
+        type: groovy.io.FileType.FILES, 
+        nameFilter: ~/build\.gradle/, 
+        maxDepth: 3, 
+        preDir: { path << it.name }, 
+        postDir: { path.removeLast() }) { if (path) include path.join(":") } 
