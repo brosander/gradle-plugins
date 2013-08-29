@@ -1,6 +1,7 @@
 class PentahoIvyPlugin implements Plugin<Project> {
   def buildProperties 
   def confMappingProperty = 'pentaho-ivy-conf-mapping'
+  def globalToLocalMapProperty = 'pentaho-global-to-local-mapping'
   def project
 
   //Will replace property references with their values in build.properties or assembly.properties for use at build time
@@ -22,23 +23,25 @@ class PentahoIvyPlugin implements Plugin<Project> {
   }
 
   def registerDependencies(String ivyLocation, Closure registerAction) {
-    def parsedIvy = new XmlParser().parse(ivyLocation)
-    parsedIvy.dependencies.each { dependencies ->
-      def defaultConf = getIvyConfMapping((dependencies.@defaultconf).split('->')[0])
-      dependencies.dependency.each { dependency ->
-        def dependencyNotation = dependency.@org + ':' + dependency.@name + ':' + dependency.@rev 
-        def isTransitive = true
-        if (dependency.@transitive != null && !'true'.equalsIgnoreCase(dependency.@transitive)) {
-          isTransitive = false
-        }
-        def changing = false
-        if (dependency.@changing != null && 'true'.equalsIgnoreCase(dependency.@changing)) {
-          changing = true
-        }
-        if (dependency.@conf != null) {
-          registerAction(dependency.@conf, dependencyNotation, isTransitive, changing)
-        } else {
-          registerAction(defaultConf, dependencyNotation, isTransitive, changing)
+    if (file(ivyLocation).exists()) {
+      def parsedIvy = new XmlParser().parse(ivyLocation)
+      parsedIvy.dependencies.each { dependencies ->
+        def defaultConf = getIvyConfMapping((dependencies.@defaultconf).split('->')[0])
+        dependencies.dependency.each { dependency ->
+          def dependencyNotation = dependency.@org + ':' + dependency.@name + ':' + dependency.@rev 
+          def isTransitive = true
+          if (dependency.@transitive != null && !'true'.equalsIgnoreCase(dependency.@transitive)) {
+            isTransitive = false
+          }
+          def changing = false
+          if (dependency.@changing != null && 'true'.equalsIgnoreCase(dependency.@changing)) {
+            changing = true
+          }
+          if (dependency.@conf != null) {
+            registerAction(dependency.@conf, dependencyNotation, isTransitive, changing)
+          } else {
+            registerAction(defaultConf, dependencyNotation, isTransitive, changing)
+          }
         }
       }
     }
@@ -71,6 +74,11 @@ class PentahoIvyPlugin implements Plugin<Project> {
     if (!confMapping.containsKey('test')) {
       confMapping.put('test', 'testCompile')
     }
+
+    if (!project.hasProperty(globalToLocalMapProperty)) {
+      project.ext[globalToLocalMapProperty] = new HashMap()
+    }
+    def globalToLocalMap = project.getProperty(globalToLocalMapProperty)
     
     project.plugins.apply(org.gradle.api.plugins.JavaPlugin)
 
