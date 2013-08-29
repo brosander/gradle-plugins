@@ -11,6 +11,7 @@ Example build.gradle:
 
     subprojects {
       apply plugin: rootProject.ext['pentaho-ivy']
+      project.getProperty('pentaho-ivy-conf-mapping').put('default-ext', 'compile')
       sourceSets {
         main {
           java {
@@ -34,4 +35,9 @@ Example settings.gradle (adapted from http://gradle.1045684.n5.nabble.com/Nested
         nameFilter: ~/build\.gradle/, 
         maxDepth: 3, 
         preDir: { path << it.name }, 
-        postDir: { path.removeLast() }) { if (path) include path.join(":") } 
+        postDir: { path.removeLast() }) {
+          if (path) {
+            include path.join(":")
+            println "include " + path.join(":")
+          }
+        }
