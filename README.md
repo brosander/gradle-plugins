@@ -12,6 +12,7 @@ Example build.gradle:
     subprojects {
       apply plugin: rootProject.ext['pentaho-ivy']
       project.getProperty('pentaho-ivy-conf-mapping').put('default-ext', 'compile')
+      project.getProperty('pentaho-ivy-conf-mapping').put('dev', 'compile')
       sourceSets {
         main {
           java {
