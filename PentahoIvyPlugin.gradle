@@ -14,7 +14,7 @@ class PentahoIvyPlugin implements Plugin<Project> {
     if (ivyConf.contains('->')) {
       ivyConf = ivyConf.split('->')[0]
     }
-    def result = project.ext[confMappingProperty].get(ivyConf)
+    def result = project.getProperty(confMappingProperty).get(ivyConf)
     if (result == null) {
       return ivyConf
     }
@@ -64,7 +64,7 @@ class PentahoIvyPlugin implements Plugin<Project> {
     if (!project.hasProperty(confMappingProperty)) {
       project.ext[confMappingProperty] = new HashMap()
     }
-    def confMapping = project.ext[confMappingProperty]
+    def confMapping = project.getProperty(confMappingProperty)
     if (!confMapping.containsKey('default')) {
       confMapping.put('default', 'compile')
     }
