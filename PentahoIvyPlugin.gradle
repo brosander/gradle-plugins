@@ -1,3 +1,5 @@
+import org.gradle.api.plugins.JavaPlugin
+
 class PentahoIvyPlugin implements Plugin<Project> {
   def buildProperties 
   def confMappingProperty = 'pentaho-ivy-conf-mapping'
@@ -22,13 +24,23 @@ class PentahoIvyPlugin implements Plugin<Project> {
     return result
   }
 
+  def getArtifactInfo(String ivyLocation) {
+    if (new java.io.File(ivyLocation).exists()) {
+      def parsedIvy = new XmlParser().parse(ivyLocation)
+      for (info in parsedIvy.info) {
+        return propertyHelper.replaceProperties(info.@organisation) + ':' + propertyHelper.replaceProperties(info.@module) + ':' + propertyHelper.replaceProperties(info.@revision)
+      }
+    }
+  }
+
   def registerDependencies(String ivyLocation, Closure registerAction) {
-    if (file(ivyLocation).exists()) {
+    if (new java.io.File(ivyLocation).exists()) {
       def parsedIvy = new XmlParser().parse(ivyLocation)
       parsedIvy.dependencies.each { dependencies ->
         def defaultConf = getIvyConfMapping((dependencies.@defaultconf).split('->')[0])
         dependencies.dependency.each { dependency ->
-          def dependencyNotation = dependency.@org + ':' + dependency.@name + ':' + dependency.@rev 
+          def dependencyNotation = dependency.@org + ':' + dependency.@name + ':' + dependency.@rev
+          def dependencyProject = project.ext[globalToLocalMapProperty][propertyHelper.replaceProperties(dependencyNotation)]
           def isTransitive = true
           if (dependency.@transitive != null && !'true'.equalsIgnoreCase(dependency.@transitive)) {
             isTransitive = false
@@ -38,9 +50,9 @@ class PentahoIvyPlugin implements Plugin<Project> {
             changing = true
           }
           if (dependency.@conf != null) {
-            registerAction(dependency.@conf, dependencyNotation, isTransitive, changing)
+            registerAction(dependency.@conf, dependencyNotation, dependencyProject, isTransitive, changing)
           } else {
-            registerAction(defaultConf, dependencyNotation, isTransitive, changing)
+            registerAction(defaultConf, dependencyNotation, dependencyProject, isTransitive, changing)
           }
         }
       }
@@ -80,7 +92,6 @@ class PentahoIvyPlugin implements Plugin<Project> {
     }
     def globalToLocalMap = project.getProperty(globalToLocalMapProperty)
     
-    project.plugins.apply(org.gradle.api.plugins.JavaPlugin)
 
     project.repositories {
       ivy {
@@ -105,14 +116,34 @@ class PentahoIvyPlugin implements Plugin<Project> {
 
     def ivyLocation = project.projectDir.absolutePath + "/ivy.xml"
 
-    project.task('parse-ivy') << {
-      registerDependencies(ivyLocation, {conf, notation, isTransitive, isChanging -> project.getDependencies().add(getIvyConfMapping(conf), propertyHelper.replaceProperties(notation), {transitive = isTransitive; changing = isChanging})})
+    project.ext[globalToLocalMapProperty][getArtifactInfo(ivyLocation)] = project.path
+    project.ext['ivy-messages'] = []
+    project.plugins.apply(JavaPlugin)
+    
+    project.beforeEvaluate {
+      registerDependencies(ivyLocation, {conf, notation, otherProject, isTransitive, isChanging -> 
+        if (otherProject == null) {
+          project.getDependencies().add(getIvyConfMapping(conf), propertyHelper.replaceProperties(notation), {transitive = isTransitive; changing = isChanging})
+        } else {
+          project.ext['ivy-messages'].add("compile project('" + otherProject + "')")
+        }
+      })
     }
 
-    project.compileJava.dependsOn(project.tasks['parse-ivy'])
+    project.task('print-deps') << {
+      if (project.ext['ivy-messages']) {
+        println "dependencies {"
+        project.ext['ivy-messages'].each { message ->
+          println "  " + message
+        }
+        println "}"
+      } else {
+        println project.path + " has no interdependencies."
+      }
+    }
 
     project.task('print-ivy') << {
-      registerDependencies(ivyLocation, {conf, notation, isTransitive, isChanging -> println getIvyConfMapping(conf) + ' "' + printPropertyHelper.replaceProperties(notation) + "\", {transitive = $isTransitive; changing = $isChanging}"})
+      registerDependencies(ivyLocation, {conf, notation, otherProject, isTransitive, isChanging -> println getIvyConfMapping(conf) + ' "' + printPropertyHelper.replaceProperties(notation) + "\", {transitive = $isTransitive; changing = $isChanging}"})
     }
   }
 }
