@@ -1,0 +1,102 @@
+import java.io.File
+import java.util.regex.Pattern
+import java.util.regex.Matcher
+import org.apache.tools.ant.PropertyHelper
+
+class PentahoProjectPlugin implements Plugin<Project> {
+  private PropertyHelper getBuildPropertyHelper(Project project) {
+    def buildProperties = new Properties()
+    def buildFile = new File(project.projectDir.absolutePath + '/build.properties')
+    if (!buildFile.exists()) {
+      buildFile = new File(project.projectDir.absolutePath + '/assembly.properties')
+    }
+    if (buildFile.exists()) {
+      println "Project $project.name Loaded build file $buildFile.absolutePath"
+    }
+    if (buildFile.exists()) {
+      buildProperties.load(new FileReader(buildFile))
+    }
+    def propertyHelper = PropertyHelper.getPropertyHelper(new org.apache.tools.ant.Project())
+    buildProperties.each{k, v -> propertyHelper.setProperty(null, k, v, true)}
+    return propertyHelper
+  }
+
+  public void apply(project) {
+    def propertyHelper = getBuildPropertyHelper(project)
+    def archiveTask = project.tasks.create('dist', Zip)
+    archiveTask.duplicatesStrategy 'exclude'
+
+    project.configurations.create('zip')
+    project.artifacts {
+      zip archiveTask
+    }
+
+    archiveTask.dependsOn(project.tasks['jar'])
+
+    project.afterEvaluate {
+      if (project.ext.has('assemble')) {
+        project.ext['assemble'].each { entry ->
+          def to = entry.get('to', '')
+          def fromType = entry.get('fromType', 'configuration')
+          def newSpec = project.copySpec {}
+          def filterSpecs = entry.get('filterSpecs', [])
+          filterSpecs.each { filterSpec -> 
+            filterSpec['pattern'] = Pattern.compile(filterSpec['pattern'])
+            def find = filterSpec['find']
+            if (find != null) {
+              filterSpec['find'] = Pattern.compile(find)
+            }
+          }
+
+          if ('folder'.equals(fromType) || 'file'.equals(fromType)) {
+            newSpec.into(to) { from entry['from'] }
+          } else if ('configurationZip'.equals(fromType)) {
+            project.configurations.findByName(entry['from']).files.each { file ->
+              newSpec.into(to) { from project.zipTree(file.absolutePath) }
+            }
+          } else if ('outputJar'.equals(fromType)) {
+            println project.jar.archivePath
+            newSpec.into(to) { from project.jar.archivePath }
+          } else {
+            newSpec.into(to) { from project.configurations.findByName(entry['from']) }
+          }
+          newSpec.duplicatesStrategy = 'exclude'
+          newSpec.eachFile { fileCopyDetails ->
+            def applicableFilterSpecs = []
+            filterSpecs.each { filterSpec ->
+              if (filterSpec['pattern'].matcher(fileCopyDetails.file.absolutePath).find()) {
+                filterSpec['absolutePath'] = fileCopyDetails.file.absolutePath
+                applicableFilterSpecs.add(filterSpec)
+              }
+            }
+            applicableFilterSpecs.each { filterSpec ->
+              def operation = filterSpec['operation']
+              println "Applying " + operation + " to " + filterSpec['absolutePath']
+              if ('exclude'.equals(operation)) {
+                fileCopyDetails.exclude()
+              } else if ('replace'.equals(operation)) {
+                fileCopyDetails.filter { line ->
+                  def matcher = filterSpec['find'].matcher(line)
+                  def replacement = Matcher.quoteReplacement(propertyHelper.replaceProperties(filterSpec['replacement']))
+                  return matcher.replaceAll(replacement)
+                }
+              } else if ('chmod'.equals(operation)) {
+                fileCopyDetails.setMode(Integer.parse(filterSpec['permissions']))
+              }
+            }
+          }
+          archiveTask.with(newSpec)
+        }
+      }
+      project.configurations.each { configuration ->
+        configuration.allDependencies.each { dependency ->
+          if (dependency instanceof ProjectDependency && dependency.configuration.equals('zip')) {
+            archiveTask.dependsOn(dependency.dependencyProject.tasks['dist'])
+          }
+        }
+      }
+    }
+  }
+}
+
+project.ext['pentaho-dist'] = PentahoProjectPlugin.class

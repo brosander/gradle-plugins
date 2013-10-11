@@ -19,7 +19,11 @@ class PentahoIvyPlugin implements Plugin<Project> {
     }
     def result = project.getProperty(confMappingProperty).get(ivyConf)
     if (result == null) {
-      return ivyConf
+      result = ivyConf
+    }
+    Configuration configuration = project.configurations.findByName(result);
+    if (configuration == null) {
+      configuration = project.configurations.create(result);
     }
     return result
   }
@@ -39,20 +43,34 @@ class PentahoIvyPlugin implements Plugin<Project> {
       parsedIvy.dependencies.each { dependencies ->
         def defaultConf = getIvyConfMapping((dependencies.@defaultconf).split('->')[0])
         dependencies.dependency.each { dependency ->
-          def dependencyNotation = dependency.@org + ':' + dependency.@name + ':' + dependency.@rev
-          def dependencyProject = project.ext[globalToLocalMapProperty][propertyHelper.replaceProperties(dependencyNotation)]
-          def isTransitive = true
-          if (dependency.@transitive != null && !'true'.equalsIgnoreCase(dependency.@transitive)) {
-            isTransitive = false
+          def dependencyNotation = [ 'group'   : propertyHelper.replaceProperties(dependency.@org),
+                                     'name'    : propertyHelper.replaceProperties(dependency.@name),
+                                     'version' : propertyHelper.replaceProperties(dependency.@rev) ]
+          def register = { extension ->
+            if (extension != null) {
+              dependencyNotation['ext'] = extension
+            }
+            def dependencyProject = project.ext[globalToLocalMapProperty][propertyHelper.replaceProperties(dependency.@org + ':' + dependency.@name + ':' + dependency.@rev)]
+            def isTransitive = true
+            if (dependency.@transitive != null && !'true'.equalsIgnoreCase(dependency.@transitive)) {
+              isTransitive = false
+            }
+            def changing = false
+            if (dependency.@changing != null && 'true'.equalsIgnoreCase(dependency.@changing)) {
+              changing = true
+            }
+            if (dependency.@conf != null) {
+              registerAction(dependency.@conf, dependencyNotation, dependencyProject, isTransitive, changing)
+            } else {
+              registerAction(defaultConf, dependencyNotation, dependencyProject, isTransitive, changing)
+            }
           }
-          def changing = false
-          if (dependency.@changing != null && 'true'.equalsIgnoreCase(dependency.@changing)) {
-            changing = true
-          }
-          if (dependency.@conf != null) {
-            registerAction(dependency.@conf, dependencyNotation, dependencyProject, isTransitive, changing)
+          if (dependency.artifact.size() == 0) {
+            register(null)
           } else {
-            registerAction(defaultConf, dependencyNotation, dependencyProject, isTransitive, changing)
+            dependency.artifact.each { artifact ->
+              register(artifact.@type)
+            }
           }
         }
       }
@@ -98,7 +116,7 @@ class PentahoIvyPlugin implements Plugin<Project> {
         url "http://repo.pentaho.org/artifactory/repo/"
         layout  "pattern", {
           ivy "[organisation]/[module]/[revision]/[module]-[revision].ivy.xml"
-          artifact "[organisation]/[module]/[revision]/[module]-[revision].jar"
+          artifact "[organisation]/[module]/[revision]/[module]-[revision].[ext]"
           m2compatible = true
         }
       }
@@ -119,15 +137,29 @@ class PentahoIvyPlugin implements Plugin<Project> {
     project.ext[globalToLocalMapProperty][getArtifactInfo(ivyLocation)] = project.path
     project.ext['ivy-messages'] = []
     project.plugins.apply(JavaPlugin)
+    project.archivesBaseName = propertyHelper.replaceProperties(buildProperties['ivy.artifact.id'])
+    project.version = propertyHelper.replaceProperties(buildProperties['project.revision'])
     
     project.beforeEvaluate {
       registerDependencies(ivyLocation, {conf, notation, otherProject, isTransitive, isChanging -> 
         if (otherProject == null) {
-          project.getDependencies().add(getIvyConfMapping(conf), propertyHelper.replaceProperties(notation), {transitive = isTransitive; changing = isChanging})
+          if ('kettle' in notation['name'] ) {
+            println notation
+          }
+          project.getDependencies().add(getIvyConfMapping(conf), notation, {
+            transitive isTransitive
+            changing isChanging
+          })
         } else {
-          project.ext['ivy-messages'].add("compile project('" + otherProject + "')")
+          project.ext['ivy-messages'].add(getIvyConfMapping(conf) + " project('" + otherProject + "')")
         }
       })
+      project.configurations.each { configuration ->
+        project.ext[globalToLocalMapProperty].each { key, value ->
+          def split = key.split(':')
+          configuration.exclude(['group': split[0], 'module' : split[1]])
+        }
+      }
     }
 
     project.task('print-deps') << {
