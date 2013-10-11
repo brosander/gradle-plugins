@@ -93,6 +93,7 @@ class PentahoIvyPlugin implements Plugin<Project> {
     this.buildProperties = buildProperties
     buildProperties.each{k, v -> propertyHelper.setProperty(null, k, v, true)}
     buildProperties.each{k, v -> printPropertyHelper.setProperty(null, k, '${property(\'' + k + '\')}', true)}
+    project.ext['propertyHelper'] = propertyHelper
 
     if (!project.hasProperty(confMappingProperty)) {
       project.ext[confMappingProperty] = new HashMap()
@@ -143,9 +144,6 @@ class PentahoIvyPlugin implements Plugin<Project> {
     project.beforeEvaluate {
       registerDependencies(ivyLocation, {conf, notation, otherProject, isTransitive, isChanging -> 
         if (otherProject == null) {
-          if ('kettle' in notation['name'] ) {
-            println notation
-          }
           project.getDependencies().add(getIvyConfMapping(conf), notation, {
             transitive isTransitive
             changing isChanging

@@ -22,9 +22,19 @@ class PentahoProjectPlugin implements Plugin<Project> {
   }
 
   public void apply(project) {
-    def propertyHelper = getBuildPropertyHelper(project)
+    def propertyHelper = null
+    if (project.hasProperty('propertyHelper')) {
+      propertyHelper = project.ext['propertyHelper']
+    } else {
+      propertyHelper = getBuildPropertyHelper(project)
+    }
     def archiveTask = project.tasks.create('dist', Zip)
     archiveTask.duplicatesStrategy 'exclude'
+
+    def srcZipTask = project.tasks.create('srcZip', Zip)
+    srcZipTask.archiveName propertyHelper.replaceProperties('${ivy.artifact.id}-${project.revision}-sources.zip')
+    srcZipTask.duplicatesStrategy 'exclude'
+    srcZipTask.into('') { from project.sourceSets*.allSource }
 
     project.configurations.create('zip')
     project.artifacts {
@@ -54,6 +64,9 @@ class PentahoProjectPlugin implements Plugin<Project> {
             project.configurations.findByName(entry['from']).files.each { file ->
               newSpec.into(to) { from project.zipTree(file.absolutePath) }
             }
+          } else if ('srcZip'.equals(fromType)) {
+            archiveTask.dependsOn(srcZipTask)
+            newSpec.into(to) { from srcZipTask.archivePath }
           } else if ('outputJar'.equals(fromType)) {
             println project.jar.archivePath
             newSpec.into(to) { from project.jar.archivePath }
@@ -62,36 +75,50 @@ class PentahoProjectPlugin implements Plugin<Project> {
           }
           newSpec.duplicatesStrategy = 'exclude'
           newSpec.eachFile { fileCopyDetails ->
-            def applicableFilterSpecs = []
+            def absolutePath = fileCopyDetails.file.absolutePath
+            def descriptions = []
             filterSpecs.each { filterSpec ->
-              if (filterSpec['pattern'].matcher(fileCopyDetails.file.absolutePath).find()) {
-                filterSpec['absolutePath'] = fileCopyDetails.file.absolutePath
-                applicableFilterSpecs.add(filterSpec)
+              if (filterSpec['pattern'].matcher(absolutePath).find()) {
+                def operation = filterSpec['operation']
+                def description = operation
+                if ('exclude'.equals(operation)) {
+                  fileCopyDetails.exclude()
+                } else if ('replace'.equals(operation)) {
+                  def replacement = Matcher.quoteReplacement(propertyHelper.replaceProperties(filterSpec['replacement']))
+                  fileCopyDetails.filter { line ->
+                    def matcher = filterSpec['find'].matcher(line)
+                    return matcher.replaceAll(replacement)
+                  }
+                  description = description + " " + filterSpec['find'] + " with " + filterSpec['replacement']
+                } else if ('chmod'.equals(operation)) {
+                  fileCopyDetails.setMode(Integer.parseInt(filterSpec['permissions']))
+                  description = description + " " + filterSpec['permissions']
+                }
+                descriptions.add(description)
               }
             }
-            applicableFilterSpecs.each { filterSpec ->
-              def operation = filterSpec['operation']
-              println "Applying " + operation + " to " + filterSpec['absolutePath']
-              if ('exclude'.equals(operation)) {
-                fileCopyDetails.exclude()
-              } else if ('replace'.equals(operation)) {
-                fileCopyDetails.filter { line ->
-                  def matcher = filterSpec['find'].matcher(line)
-                  def replacement = Matcher.quoteReplacement(propertyHelper.replaceProperties(filterSpec['replacement']))
-                  return matcher.replaceAll(replacement)
-                }
-              } else if ('chmod'.equals(operation)) {
-                fileCopyDetails.setMode(Integer.parse(filterSpec['permissions']))
+            if (descriptions.size() > 0) {
+              println "Applied the following filterSpecs to " + absolutePath
+              descriptions.each { description ->
+                println "    " + description
               }
             }
           }
           archiveTask.with(newSpec)
         }
       }
+      project.configurations['compile'].allDependencies.each { dependency ->
+        if (dependency instanceof ProjectDependency) {
+          srcZipTask.into('') { from dependency.dependencyProject.sourceSets*.allSource }
+        }
+      }
       project.configurations.each { configuration ->
         configuration.allDependencies.each { dependency ->
-          if (dependency instanceof ProjectDependency && dependency.configuration.equals('zip')) {
-            archiveTask.dependsOn(dependency.dependencyProject.tasks['dist'])
+          if (dependency instanceof ProjectDependency) {
+            if(dependency.configuration.equals('zip')) {
+              archiveTask.dependsOn(dependency.dependencyProject.tasks['dist'])
+            }
+            project.evaluationDependsOn(dependency.dependencyProject.path)
           }
         }
       }
