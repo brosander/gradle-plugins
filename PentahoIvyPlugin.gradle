@@ -51,14 +51,8 @@ class PentahoIvyPlugin implements Plugin<Project> {
               dependencyNotation['ext'] = extension
             }
             def dependencyProject = project.ext[globalToLocalMapProperty][propertyHelper.replaceProperties(dependency.@org + ':' + dependency.@name + ':' + dependency.@rev)]
-            def isTransitive = true
-            if (dependency.@transitive != null && !'true'.equalsIgnoreCase(dependency.@transitive)) {
-              isTransitive = false
-            }
-            def changing = false
-            if (dependency.@changing != null && 'true'.equalsIgnoreCase(dependency.@changing)) {
-              changing = true
-            }
+            def isTransitive = dependency.@transitive == null || 'true'.equalsIgnoreCase(dependency.@transitive) 
+            def changing = dependency.@changing != null && 'true'.equalsIgnoreCase(dependency.@changing)
             if (dependency.@conf != null) {
               registerAction(dependency.@conf, dependencyNotation, dependencyProject, isTransitive, changing)
             } else {
