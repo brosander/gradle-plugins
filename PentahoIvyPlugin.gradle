@@ -1,3 +1,4 @@
+import java.io.File
 import org.gradle.api.plugins.JavaPlugin
 
 class PentahoIvyPlugin implements Plugin<Project> {
@@ -11,7 +12,6 @@ class PentahoIvyPlugin implements Plugin<Project> {
 
   //Will replace property references with a string that will resolve them for use in build.gradle
   def printPropertyHelper = org.apache.tools.ant.PropertyHelper.getPropertyHelper(new org.apache.tools.ant.Project())
-  def engine = new groovy.text.SimpleTemplateEngine()
 
   def getIvyConfMapping(String ivyConf) {
     if (ivyConf.contains('->')) {
@@ -29,7 +29,7 @@ class PentahoIvyPlugin implements Plugin<Project> {
   }
 
   def getArtifactInfo(String ivyLocation) {
-    if (new java.io.File(ivyLocation).exists()) {
+    if (new File(ivyLocation).exists()) {
       def parsedIvy = new XmlParser().parse(ivyLocation)
       for (info in parsedIvy.info) {
         return propertyHelper.replaceProperties(info.@organisation) + ':' + propertyHelper.replaceProperties(info.@module) + ':' + propertyHelper.replaceProperties(info.@revision)
@@ -38,14 +38,14 @@ class PentahoIvyPlugin implements Plugin<Project> {
   }
 
   def registerDependencies(String ivyLocation, Closure registerAction) {
-    if (new java.io.File(ivyLocation).exists()) {
+    if (new File(ivyLocation).exists()) {
       def parsedIvy = new XmlParser().parse(ivyLocation)
       parsedIvy.dependencies.each { dependencies ->
         def defaultConf = getIvyConfMapping((dependencies.@defaultconf).split('->')[0])
         dependencies.dependency.each { dependency ->
-          def dependencyNotation = [ 'group'   : propertyHelper.replaceProperties(dependency.@org),
-                                     'name'    : propertyHelper.replaceProperties(dependency.@name),
-                                     'version' : propertyHelper.replaceProperties(dependency.@rev) ]
+          def dependencyNotation = [ 'group'   : dependency.@org,
+                                     'name'    : dependency.@name,
+                                     'version' : dependency.@rev ]
           def register = { extension ->
             if (extension != null) {
               dependencyNotation['ext'] = extension
@@ -79,20 +79,19 @@ class PentahoIvyPlugin implements Plugin<Project> {
 
   void apply(Project project) {
     this.project = project
-    def buildProperties = new Properties()
+    this.buildProperties = new Properties()
     def buildFile = new File(project.projectDir.absolutePath + '/build.properties')
     if (!buildFile.exists()) {
       buildFile = new File(project.projectDir.absolutePath + '/assembly.properties')
     } 
     if (buildFile.exists()) {
       println "Project $project.name Loaded build file $buildFile.absolutePath"
-    }
-    if (buildFile.exists()) {
       buildProperties.load(new FileReader(buildFile))
     }
-    this.buildProperties = buildProperties
-    buildProperties.each{k, v -> propertyHelper.setProperty(null, k, v, true)}
-    buildProperties.each{k, v -> printPropertyHelper.setProperty(null, k, '${property(\'' + k + '\')}', true)}
+    buildProperties.each{k, v -> 
+      propertyHelper.setProperty(null, k, v, true)
+      printPropertyHelper.setProperty(null, k, '${property(\'' + k + '\')}', true)
+    }
     project.ext['propertyHelper'] = propertyHelper
 
     if (!project.hasProperty(confMappingProperty)) {
@@ -110,7 +109,6 @@ class PentahoIvyPlugin implements Plugin<Project> {
       project.ext[globalToLocalMapProperty] = new HashMap()
     }
     def globalToLocalMap = project.getProperty(globalToLocalMapProperty)
-    
 
     project.repositories {
       ivy {
@@ -144,10 +142,9 @@ class PentahoIvyPlugin implements Plugin<Project> {
     project.beforeEvaluate {
       registerDependencies(ivyLocation, {conf, notation, otherProject, isTransitive, isChanging -> 
         if (otherProject == null) {
-          project.getDependencies().add(getIvyConfMapping(conf), notation, {
-            transitive isTransitive
-            changing isChanging
-          })
+          project.getDependencies().add(getIvyConfMapping(conf), 
+            notation.collectEntries([:], { k, v -> [k, propertyHelper.replaceProperties(v)] }), 
+            { transitive isTransitive; changing isChanging })
         } else {
           project.ext['ivy-messages'].add(getIvyConfMapping(conf) + " project('" + otherProject + "')")
         }
@@ -164,16 +161,30 @@ class PentahoIvyPlugin implements Plugin<Project> {
       if (project.ext['ivy-messages']) {
         println "dependencies {"
         project.ext['ivy-messages'].each { message ->
-          println "  " + message
+          println "  $message"
         }
         println "}"
       } else {
-        println project.path + " has no interdependencies."
+        println "${project.path} has no interdependencies."
       }
     }
 
     project.task('print-ivy') << {
-      registerDependencies(ivyLocation, {conf, notation, otherProject, isTransitive, isChanging -> println getIvyConfMapping(conf) + ' "' + printPropertyHelper.replaceProperties(notation) + "\", {transitive = $isTransitive; changing = $isChanging}"})
+      println "dependencies {"
+      registerDependencies(ivyLocation, {conf, notation, otherProject, isTransitive, isChanging -> 
+        print "  ${getIvyConfMapping(conf)} "
+        if (otherProject != null) {
+          println " project('" + otherProject + "')"
+        } else {
+          def keys = new java.util.ArrayList(notation.keySet())
+          java.util.Collections.sort(keys)
+          keys.each { key ->
+            print "$key: ${printPropertyHelper.replaceProperties(notation[key])}, "
+          }
+          println " transitive: $isTransitive, changing: $isChanging"
+        }
+      })
+      println "}"
     }
   }
 }
