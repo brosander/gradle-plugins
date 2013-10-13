@@ -3,21 +3,30 @@ This is a suite of plugins designed to facilitate porting of Pentaho build logic
 Example build.gradle:
 
     def trunkProject = project
-
+    
+    // Make plugins available to build script by applying at root level
     file('/home/bryan/platform-codebase/gradle').listFiles().findAll { it.name.endsWith('.gradle')}.each { plugin ->
         println "Applying: " + plugin + " to " + project.name
         project.apply from: plugin
     }
 
+    //Mappings from ivy dependency to project dependency for subprojects
     def projectMappings = new HashMap()
 
     subprojects {
       if (file(project.projectDir.absolutePath + '/build.gradle').exists()) {
+        // everyone needs a reference to the ivy mappings
         project.ext['pentaho-global-to-local-mapping'] = projectMappings
+        
+        // apply the pentaho plugins
         apply plugin: trunkProject.ext['pentaho-ivy']
         apply plugin: trunkProject.ext['pentaho-dist']
+        
+        // specify necessary ivy -> gradle mappings
         project.getProperty('pentaho-ivy-conf-mapping').put('dev', 'compile')
         project.getProperty('pentaho-ivy-conf-mapping').put('default-ext', 'compile')
+        
+        // custom source sets
         project.afterEvaluate {
           sourceSets {
             main {
