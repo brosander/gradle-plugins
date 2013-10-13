@@ -68,7 +68,6 @@ class PentahoProjectPlugin implements Plugin<Project> {
             archiveTask.dependsOn(srcZipTask)
             newSpec.into(to) { from srcZipTask.archivePath }
           } else if ('outputJar'.equals(fromType)) {
-            println project.jar.archivePath
             newSpec.into(to) { from project.jar.archivePath }
           } else {
             newSpec.into(to) { from project.configurations.findByName(entry['from']) }
@@ -91,7 +90,7 @@ class PentahoProjectPlugin implements Plugin<Project> {
                   }
                   description = description + " " + filterSpec['find'] + " with " + filterSpec['replacement']
                 } else if ('chmod'.equals(operation)) {
-                  fileCopyDetails.setMode(Integer.parseInt(filterSpec['permissions']))
+                  fileCopyDetails.setMode(Integer.parseInt(filterSpec['permissions'], 8))
                   description = description + " " + filterSpec['permissions']
                 }
                 descriptions.add(description)
