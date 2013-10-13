@@ -72,6 +72,7 @@ Once this setup is done, each project just needs a build.gradle that specifies:
 
 The configuration list should be specified in the build.gradle of the project.
 Ex:
+
     project.ext['assemble'] = [
       [ 'from' : 'launcher',    'to' : 'launcher' ],
       [ 'from' : 'package-res', 'to' : '',        'fromType' : 'folder',
@@ -81,7 +82,7 @@ Ex:
           [ 'pattern' : '.*\\.sh',          'operation' : 'chmod', 'permissions' : '755' ] ] ],
       [ 'from' : 'plugins',     'to' : 'plugins', 'fromType' : 'configurationZip' ],
       [ 'from' : 'runtime',     'to' : 'lib',
-        'filterSpecs': [
+         'filterSpecs': [
           [ 'pattern' : '.*activation-.*\\.jar', 'operation' : 'exclude' ],
           [ 'pattern' : '.*swt-linux-.*\\.jar', 'operation' : 'exclude' ] ]
       ],
@@ -90,15 +91,15 @@ Ex:
     ]
 
 The entries are made up of maps that specify:
-1. The from location
-2. The to location
-3. The fromType that can be one of the following:
-  * configuration (the default) for all dependencies and the built jars of that configuration
-  * configurationZip for a distribution artifact of another project
-  * folder (or file) for a folder or file
-4. Optional filterSpecs which is a list of filters to be applied to the files as they're copied.  These are be made up of:
-  * The pattern (a java regular expression) that the filename should match for the operation to occur
-  * The operation, one of the following:
-    * replace - replaces the find regular expression with the replacement string
-    * exclude - excludes the file from the copy operation
-    * chmod - sets the permissions on the file
+* The from location
+* The to location
+* The fromType that can be one of the following:
+    + configuration (the default) for all dependencies and the built jars of that configuration
+    + configurationZip for a distribution artifact of another project
+    + folder (or file) for a folder or file
+* Optional filterSpecs which is a list of filters to be applied to the files as they're copied.  These are be made up of:
+    + The pattern (a java regular expression) that the filename should match for the operation to occur
+    + The operation, one of the following:
+        + replace - replaces the find regular expression with the replacement string
+        + exclude - excludes the file from the copy operation
+        + chmod - sets the permissions on the file
