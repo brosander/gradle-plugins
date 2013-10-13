@@ -84,10 +84,7 @@ class PentahoProjectPlugin implements Plugin<Project> {
                   fileCopyDetails.exclude()
                 } else if ('replace'.equals(operation)) {
                   def replacement = Matcher.quoteReplacement(propertyHelper.replaceProperties(filterSpec['replacement']))
-                  fileCopyDetails.filter { line ->
-                    def matcher = filterSpec['find'].matcher(line)
-                    return matcher.replaceAll(replacement)
-                  }
+                  fileCopyDetails.filter { line -> filterSpec['find'].matcher(line).replaceAll(replacement) }
                   description = description + " " + filterSpec['find'] + " with " + filterSpec['replacement']
                 } else if ('chmod'.equals(operation)) {
                   fileCopyDetails.setMode(Integer.parseInt(filterSpec['permissions'], 8))
@@ -98,9 +95,7 @@ class PentahoProjectPlugin implements Plugin<Project> {
             }
             if (descriptions.size() > 0) {
               println "Applied the following filterSpecs to " + absolutePath
-              descriptions.each { description ->
-                println "    " + description
-              }
+              descriptions.each { description -> println "    $description" }
             }
           }
           archiveTask.with(newSpec)
@@ -113,11 +108,8 @@ class PentahoProjectPlugin implements Plugin<Project> {
       }
       project.configurations.each { configuration ->
         configuration.allDependencies.each { dependency ->
-          if (dependency instanceof ProjectDependency) {
-            if(dependency.configuration.equals('zip')) {
+          if (dependency instanceof ProjectDependency && dependency.configuration.equals('zip')) {
               archiveTask.dependsOn(dependency.dependencyProject.tasks['dist'])
-            }
-            project.evaluationDependsOn(dependency.dependencyProject.path)
           }
         }
       }
