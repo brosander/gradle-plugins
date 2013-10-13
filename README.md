@@ -2,26 +2,40 @@ This is a suite of plugins designed to facilitate porting of Pentaho build logic
 
 Example build.gradle:
 
-    def rootProject = project
+    def trunkProject = project
 
     file('/home/bryan/platform-codebase/gradle').listFiles().findAll { it.name.endsWith('.gradle')}.each { plugin ->
         println "Applying: " + plugin + " to " + project.name
-        project.apply from: plugin 
+        project.apply from: plugin
     }
 
+    def projectMappings = new HashMap()
+
     subprojects {
-      apply plugin: rootProject.ext['pentaho-ivy']
-      project.getProperty('pentaho-ivy-conf-mapping').put('default-ext', 'compile')
-      project.getProperty('pentaho-ivy-conf-mapping').put('dev', 'compile')
-      sourceSets {
-        main {
-          java {
-            srcDir 'src'
-          }
-        }
-        test {
-          java {
-            srcDir 'test-src'
+      if (file(project.projectDir.absolutePath + '/build.gradle').exists()) {
+        project.ext['pentaho-global-to-local-mapping'] = projectMappings
+        apply plugin: trunkProject.ext['pentaho-ivy']
+        apply plugin: trunkProject.ext['pentaho-dist']
+        project.getProperty('pentaho-ivy-conf-mapping').put('dev', 'compile')
+        project.getProperty('pentaho-ivy-conf-mapping').put('default-ext', 'compile')
+        project.afterEvaluate {
+          sourceSets {
+            main {
+              java {
+                srcDir 'src'
+              }
+              resources {
+                srcDir 'src'
+              }
+            }
+            test {
+              java {
+                srcDir 'test-src'
+              }
+              resources {
+                srcDir 'test-src'
+              }
+            }
           }
         }
       }
