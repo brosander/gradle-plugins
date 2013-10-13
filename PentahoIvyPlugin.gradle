@@ -119,14 +119,8 @@ class PentahoIvyPlugin implements Plugin<Project> {
       mavenCentral()
     }
 
-    buildProperties.each{k, v -> 
-      if (!project.hasProperty(k)) {
-        project.ext[k] = v
-      }
-    }
-
+    buildProperties.each{ k, v -> if (!project.hasProperty(k)) { project.ext[k] = v } }
     def ivyLocation = project.projectDir.absolutePath + "/ivy.xml"
-
     project.ext[globalToLocalMapProperty][getArtifactInfo(ivyLocation)] = project.path
     project.ext['ivy-messages'] = []
     project.plugins.apply(JavaPlugin)
