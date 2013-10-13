@@ -65,3 +65,40 @@ Example settings.gradle (adapted from http://gradle.1045684.n5.nabble.com/Nested
             println "include " + path.join(":")
           }
         }
+
+Once this setup is done, each project just needs a build.gradle that specifies:
+1. The cross-project dependencies
+2. A configuration list for the assemblies (anything creating a zip distribution artifact)
+
+The configuration list should be specified in the build.gradle of the project.
+Ex:
+    project.ext['assemble'] = [
+      [ 'from' : 'launcher',    'to' : 'launcher' ],
+      [ 'from' : 'package-res', 'to' : '',        'fromType' : 'folder',
+        'filterSpecs': [
+          [ 'pattern' : '.*\\.sh|.*\\.bat|.*\\.plist', 'operation' : 'replace', 'find' : 'launcher\\.jar', 'replacement' : 'pentaho-application-launcher-${project.revision}.jar' ],
+          [ 'pattern' : '.*\\.sh|.*\\.bat', 'operation' : 'replace', 'find' : '@KETTLE_VERSION_STRING@', 'replacement' : '${project.revision}' ],
+          [ 'pattern' : '.*\\.sh',          'operation' : 'chmod', 'permissions' : '755' ] ] ],
+      [ 'from' : 'plugins',     'to' : 'plugins', 'fromType' : 'configurationZip' ],
+      [ 'from' : 'runtime',     'to' : 'lib',
+        'filterSpecs': [
+          [ 'pattern' : '.*activation-.*\\.jar', 'operation' : 'exclude' ],
+          [ 'pattern' : '.*swt-linux-.*\\.jar', 'operation' : 'exclude' ] ]
+      ],
+      [ 'from' : 'swtlibs',     'to' : '',        'fromType' : 'configurationZip' ],
+      [ 'fromType' : 'srcZip',  'to' : '']
+    ]
+
+The entries are made up of maps that specify:
+1. The from location
+2. The to location
+3. The fromType that can be one of the following:
+  * configuration (the default) for all dependencies and the built jars of that configuration
+  * configurationZip for a distribution artifact of another project
+  * folder (or file) for a folder or file
+4. Optional filterSpecs which is a list of filters to be applied to the files as they're copied.  These are be made up of:
+  * The pattern (a java regular expression) that the filename should match for the operation to occur
+  * The operation, one of the following:
+    * replace - replaces the find regular expression with the replacement string
+    * exclude - excludes the file from the copy operation
+    * chmod - sets the permissions on the file
