@@ -67,6 +67,7 @@ Example settings.gradle (adapted from http://gradle.1045684.n5.nabble.com/Nested
         }
 
 Once this setup is done, each project just needs a build.gradle that specifies:
+
 1. The cross-project dependencies
 2. A configuration list for the assemblies (anything creating a zip distribution artifact)
 
