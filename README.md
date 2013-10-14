@@ -98,6 +98,7 @@ The entries are made up of maps that specify:
     + configuration (the default) for all dependencies and the built jars of that configuration
     + configurationZip for a zipped distribution artifact of another project that should be unzipped
     + folder (or file) for a folder or file
+    + outputJar for the jar resulting from the build
 * Optional filterSpecs which is a list of filters to be applied to the files as they're copied.  These are be made up of:
     + The pattern (a java regular expression) that the filename should match for the operation to occur
     + The operation, one of the following:
