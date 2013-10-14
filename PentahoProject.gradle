@@ -4,30 +4,8 @@ import java.util.regex.Matcher
 import org.apache.tools.ant.PropertyHelper
 
 class PentahoProjectPlugin implements Plugin<Project> {
-  private PropertyHelper getBuildPropertyHelper(Project project) {
-    def buildProperties = new Properties()
-    def buildFile = new File(project.projectDir.absolutePath + '/build.properties')
-    if (!buildFile.exists()) {
-      buildFile = new File(project.projectDir.absolutePath + '/assembly.properties')
-    }
-    if (buildFile.exists()) {
-      println "Project $project.name Loaded build file $buildFile.absolutePath"
-    }
-    if (buildFile.exists()) {
-      buildProperties.load(new FileReader(buildFile))
-    }
-    def propertyHelper = PropertyHelper.getPropertyHelper(new org.apache.tools.ant.Project())
-    buildProperties.each{k, v -> propertyHelper.setProperty(null, k, v, true)}
-    return propertyHelper
-  }
-
   public void apply(project) {
-    def propertyHelper = null
-    if (project.hasProperty('propertyHelper')) {
-      propertyHelper = project.ext['propertyHelper']
-    } else {
-      propertyHelper = getBuildPropertyHelper(project)
-    }
+    def propertyHelper = project.ext['propertyHelper']
     def archiveTask = project.tasks.create('dist', Zip)
     archiveTask.duplicatesStrategy 'exclude'
 
